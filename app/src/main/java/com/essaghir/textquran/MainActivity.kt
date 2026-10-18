@@ -1,4 +1,4 @@
-package com.example.textreaderwear
+package com.essaghir.textquran
 
 import android.app.Application
 import android.content.Context
@@ -16,7 +16,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -29,25 +28,32 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,6 +67,7 @@ import androidx.wear.compose.material3.Text
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -80,6 +87,26 @@ enum class ReaderTheme(val label: String) {
     SYSTEM("System"),
     LIGHT("Light"),
     DARK("Dark")
+}
+
+enum class AyahMarker(val label: String, val symbol: String) {
+    ORNAMENT("Ayah ۝", " ۝"),
+    BULLET("Bullet •", " •"),
+    CIRCLE("Circle ◦", " ◦"),
+    STAR("Star ✦", " ✦"),
+    NONE("None", "")
+}
+
+enum class ScrollSpeed(val label: String, val dpPerSecond: Float) {
+    SLOW("Slow", 12f),
+    MEDIUM("Medium", 24f),
+    FAST("Fast", 48f)
+}
+
+enum class ReaderFontFamily(val label: String, val compose: FontFamily) {
+    SANS("Sans", FontFamily.SansSerif),
+    SERIF("Serif", FontFamily.Serif),
+    MONOSPACE("Mono", FontFamily.Monospace)
 }
 
 enum class ReaderTextColor(
@@ -104,8 +131,12 @@ data class ReaderUiState(
     val pageIndex: Int = 0,
     val fontSize: Float = 17f,
     val language: ReaderLanguage = ReaderLanguage.ARABIC,
-    val theme: ReaderTheme = ReaderTheme.SYSTEM,
+    val theme: ReaderTheme = ReaderTheme.DARK,
     val textColor: ReaderTextColor = ReaderTextColor.DEFAULT,
+    val ayahMarker: AyahMarker = AyahMarker.ORNAMENT,
+    val scrollSpeed: ScrollSpeed = ScrollSpeed.MEDIUM,
+    val fontFamily: ReaderFontFamily = ReaderFontFamily.SANS,
+    val isBold: Boolean = false,
     val bookmarks: List<Int> = emptyList()
 )
 
@@ -117,17 +148,30 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         else -> ReaderLanguage.ARABIC
     }
     private val initialTheme = runCatching {
-        ReaderTheme.valueOf(preferences.getString("theme", ReaderTheme.SYSTEM.name) ?: ReaderTheme.SYSTEM.name)
-    }.getOrDefault(ReaderTheme.SYSTEM)
+        ReaderTheme.valueOf(preferences.getString("theme", ReaderTheme.DARK.name) ?: ReaderTheme.DARK.name)
+    }.getOrDefault(ReaderTheme.DARK)
     private val initialTextColor = runCatching {
         ReaderTextColor.valueOf(preferences.getString("text_color", ReaderTextColor.DEFAULT.name) ?: ReaderTextColor.DEFAULT.name)
     }.getOrDefault(ReaderTextColor.DEFAULT)
+    private val initialAyahMarker = runCatching {
+        AyahMarker.valueOf(preferences.getString("ayah_marker", AyahMarker.ORNAMENT.name) ?: AyahMarker.ORNAMENT.name)
+    }.getOrDefault(AyahMarker.ORNAMENT)
+    private val initialScrollSpeed = runCatching {
+        ScrollSpeed.valueOf(preferences.getString("scroll_speed", ScrollSpeed.MEDIUM.name) ?: ScrollSpeed.MEDIUM.name)
+    }.getOrDefault(ScrollSpeed.MEDIUM)
+    private val initialFontFamily = runCatching {
+        ReaderFontFamily.valueOf(preferences.getString("font_family", ReaderFontFamily.SANS.name) ?: ReaderFontFamily.SANS.name)
+    }.getOrDefault(ReaderFontFamily.SANS)
     private val initialFontSize = preferences.getFloat("font_size", 17f).coerceIn(12f, 30f)
     private val _state = MutableStateFlow(
         ReaderUiState(
             language = initialLanguage,
             theme = initialTheme,
             textColor = initialTextColor,
+            ayahMarker = initialAyahMarker,
+            scrollSpeed = initialScrollSpeed,
+            fontFamily = initialFontFamily,
+            isBold = preferences.getBoolean("bold_text", false),
             fontSize = initialFontSize,
             bookmarks = loadBookmarks(initialLanguage)
         )
@@ -153,6 +197,33 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     fun selectTextColor(textColor: ReaderTextColor) {
         preferences.edit().putString("text_color", textColor.name).apply()
         _state.value = _state.value.copy(textColor = textColor)
+    }
+
+    fun selectAyahMarker(marker: AyahMarker) {
+        preferences.edit().putString("ayah_marker", marker.name).apply()
+        val old = _state.value
+        val anchor = old.pageIndex.toFloat() / old.pages.size.coerceAtLeast(1)
+        val newPages = paginate(old.rawText, old.fontSize, marker)
+        _state.value = old.copy(
+            ayahMarker = marker,
+            pages = newPages,
+            pageIndex = (anchor * newPages.size).toInt().coerceIn(0, newPages.lastIndex.coerceAtLeast(0))
+        )
+    }
+
+    fun selectScrollSpeed(speed: ScrollSpeed) {
+        preferences.edit().putString("scroll_speed", speed.name).apply()
+        _state.value = _state.value.copy(scrollSpeed = speed)
+    }
+
+    fun selectFontFamily(fontFamily: ReaderFontFamily) {
+        preferences.edit().putString("font_family", fontFamily.name).apply()
+        _state.value = _state.value.copy(fontFamily = fontFamily)
+    }
+
+    fun setBold(isBold: Boolean) {
+        preferences.edit().putBoolean("bold_text", isBold).apply()
+        _state.value = _state.value.copy(isBold = isBold)
     }
 
     fun toggleBookmark() {
@@ -188,8 +259,12 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         _state.value = _state.value.copy(
             fontSize = 17f,
             language = ReaderLanguage.ARABIC,
-            theme = ReaderTheme.SYSTEM,
-            textColor = ReaderTextColor.DEFAULT
+            theme = ReaderTheme.DARK,
+            textColor = ReaderTextColor.DEFAULT,
+            ayahMarker = AyahMarker.ORNAMENT,
+            scrollSpeed = ScrollSpeed.MEDIUM,
+            fontFamily = ReaderFontFamily.SANS,
+            isBold = false
         )
         loadText(ReaderLanguage.ARABIC)
     }
@@ -266,7 +341,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun cacheFile(language: ReaderLanguage) =
-        File(getApplication<Application>().filesDir, "quran-${language.name.lowercase()}.txt")
+        File(getApplication<Application>().filesDir, "quran-v2-${language.name.lowercase()}.txt")
 
     private fun bookmarkKey(language: ReaderLanguage) = "bookmarks_${language.name.lowercase()}"
 
@@ -296,7 +371,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         preferences.edit().putFloat("font_size", newSize).apply()
         val old = _state.value
         val anchor = old.pageIndex.toFloat() / old.pages.size.coerceAtLeast(1)
-        val newPages = paginate(old.rawText, newSize)
+        val newPages = paginate(old.rawText, newSize, old.ayahMarker)
         _state.value = old.copy(
             fontSize = newSize,
             pages = newPages,
@@ -328,16 +403,39 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                     val ayahs = surahs.getJSONObject(surahIndex).getJSONArray("ayahs")
                     for (ayahIndex in 0 until ayahs.length()) {
                         if (isNotEmpty()) append('\n')
-                        append(ayahs.getJSONObject(ayahIndex).getString("text").trim())
+                        val ayah = ayahs.getJSONObject(ayahIndex)
+                        append(ayah.getString("text").trim())
+                        append('\u001F')
+                        append(ayah.getInt("numberInSurah"))
                     }
                 }
             }.removePrefix("\uFEFF")
         } finally { connection.disconnect() }
     }
 
-    private fun paginate(text: String, fontSize: Float): List<String> {
-        return text.trim().chunked(charsPerPage(fontSize)).ifEmpty { listOf("Le fichier est vide.") }
+    private fun paginate(text: String, fontSize: Float, marker: AyahMarker = _state.value.ayahMarker): List<String> {
+        val maxChars = charsPerPage(fontSize)
+        val pages = mutableListOf<String>()
+        val page = StringBuilder()
+        for (line in text.lineSequence()) {
+            val separatorIndex = line.lastIndexOf('\u001F')
+            val verseText = if (separatorIndex >= 0) line.substring(0, separatorIndex) else line
+            val verseNumber = line.substring(separatorIndex + 1).toIntOrNull()
+            val numberLabel = if (marker == AyahMarker.NONE) "" else verseNumber?.let(::toArabicIndicDigits).orEmpty()
+            val displayVerse = verseText + marker.symbol + numberLabel
+            if (page.isNotEmpty() && page.length + 1 + displayVerse.length > maxChars) {
+                pages += page.toString()
+                page.clear()
+            }
+            if (page.isNotEmpty()) page.append('\n')
+            page.append(displayVerse)
+        }
+        if (page.isNotEmpty()) pages += page.toString()
+        return pages.ifEmpty { listOf("Le fichier est vide.") }
     }
+
+    private fun toArabicIndicDigits(value: Int): String =
+        value.toString().map { char -> if (char in '0'..'9') ('٠'.code + char.code - '0'.code).toChar() else char }.joinToString("")
 
     private fun charsPerPage(fontSize: Float) = (760 * 17f / fontSize).toInt().coerceAtLeast(240)
 }
@@ -357,9 +455,7 @@ private fun ReaderScreen(vm: ReaderViewModel = viewModel()) {
         ReaderTheme.LIGHT -> false
         ReaderTheme.DARK -> true
     }
-    var requestedPage by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
-    var showControls by remember { mutableStateOf(false) }
 
     WristTiltNavigation(enabled = !showSettings && state.pages.isNotEmpty()) {
         vm.changePage(1)
@@ -393,6 +489,10 @@ private fun ReaderScreen(vm: ReaderViewModel = viewModel()) {
                                 language = state.language,
                                 theme = state.theme,
                                 textColor = state.textColor,
+                                ayahMarker = state.ayahMarker,
+                                scrollSpeed = state.scrollSpeed,
+                                fontFamily = state.fontFamily,
+                                isBold = state.isBold,
                                 isDarkTheme = useDarkColors,
                                 bookmarks = state.bookmarks,
                                 vm = vm,
@@ -405,16 +505,12 @@ private fun ReaderScreen(vm: ReaderViewModel = viewModel()) {
                         } else {
                             ReaderContent(
                                 state = state,
-                                requestedPage = requestedPage,
-                                onRequestedPageChanged = { requestedPage = it },
                                 vm = vm,
-                                showControls = showControls,
-                                onToggleControls = { showControls = !showControls },
                                 onSwipe = vm::changePage,
                                 onPinchZoom = vm::scaleFontSize,
                                 useDarkColors = useDarkColors,
-                                onOpenSettings = { showSettings = true },
-                                onRetry = vm::downloadText
+                                scrollSpeed = state.scrollSpeed,
+                                onOpenSettings = { showSettings = true }
                             )
                         }
                     }
@@ -548,6 +644,10 @@ private fun ColumnScope.ReaderSettings(
     language: ReaderLanguage,
     theme: ReaderTheme,
     textColor: ReaderTextColor,
+    ayahMarker: AyahMarker,
+    scrollSpeed: ScrollSpeed,
+    fontFamily: ReaderFontFamily,
+    isBold: Boolean,
     isDarkTheme: Boolean,
     bookmarks: List<Int>,
     vm: ReaderViewModel,
@@ -574,6 +674,37 @@ private fun ColumnScope.ReaderSettings(
             ReaderTheme.values().forEach { option ->
                 ActionButton(if (theme == option) "${option.label} ✓" else option.label) {
                     vm.selectTheme(option)
+                }
+            }
+        }
+        Text("Auto-scroll speed", fontSize = 14.sp)
+        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            ScrollSpeed.values().forEach { option ->
+                ActionButton(if (scrollSpeed == option) "${option.label} ✓" else option.label) {
+                    vm.selectScrollSpeed(option)
+                }
+            }
+            Text("Font family", fontSize = 14.sp)
+            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                ReaderFontFamily.values().forEach { option ->
+                    ActionButton(if (fontFamily == option) "${option.label} ✓" else option.label) {
+                        vm.selectFontFamily(option)
+                    }
+                }
+            }
+            Text("Bold text", fontSize = 14.sp)
+            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                ActionButton(if (isBold) "On ✓" else "On") { vm.setBold(true) }
+                ActionButton(if (!isBold) "Off ✓" else "Off") { vm.setBold(false) }
+            }
+        }
+        Text("Ayah end symbol", fontSize = 14.sp)
+        AyahMarker.values().toList().chunked(3).forEach { markerRow ->
+            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                markerRow.forEach { option ->
+                    ActionButton(if (ayahMarker == option) "${option.label} ✓" else option.label) {
+                        vm.selectAyahMarker(option)
+                    }
                 }
             }
         }
@@ -610,7 +741,11 @@ private fun ColumnScope.ReaderSettings(
             Spacer(Modifier.width(8.dp))
             ActionButton("A+") { vm.changeFontSize(2f) }
         }
-        Text("Uthmani • Saheeh International • AlQuran Cloud", fontSize = 10.sp, textAlign = TextAlign.Center)
+        Text(
+            "API: AlQuran Cloud • Uthmani: Tanzil.net / Quran Academy • English: Saheeh International",
+            fontSize = 10.sp,
+            textAlign = TextAlign.Center
+        )
         Spacer(Modifier.height(8.dp))
         ActionButton("Reset defaults") { vm.resetSettings() }
         ActionButton("Retour", onClick = onBack)
@@ -620,24 +755,18 @@ private fun ColumnScope.ReaderSettings(
 @Composable
 private fun ColumnScope.ReaderContent(
     state: ReaderUiState,
-    requestedPage: String,
-    onRequestedPageChanged: (String) -> Unit,
     vm: ReaderViewModel,
-    showControls: Boolean,
-    onToggleControls: () -> Unit,
     onSwipe: (Int) -> Unit,
     onPinchZoom: (Float) -> Unit,
     useDarkColors: Boolean,
-    onOpenSettings: () -> Unit,
-    onRetry: () -> Unit
+    scrollSpeed: ScrollSpeed,
+    onOpenSettings: () -> Unit
 ) {
+    var isAutoScrolling by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .weight(1f)
-            .fillMaxWidth()
-            .pointerInput(onToggleControls) {
-                detectTapGestures(onLongPress = { onToggleControls() })
-            },
+            .fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Column(
@@ -699,53 +828,108 @@ private fun ColumnScope.ReaderContent(
             ) { pageIndex ->
                 val pageOffset = (pageIndex * (760 * 17f / state.fontSize).toInt().coerceAtLeast(240))
                     .coerceAtMost(state.rawText.length)
+                val pageScrollState = rememberScrollState()
+                val density = LocalDensity.current.density
+                val scrollScope = rememberCoroutineScope()
+                LaunchedEffect(isAutoScrolling, pageIndex, scrollSpeed) {
+                    if (!isAutoScrolling) return@LaunchedEffect
+                    var previousFrame = 0L
+                    var fractionalPixels = 0f
+                    withFrameNanos { it }
+                    while (isAutoScrolling && pageScrollState.value < pageScrollState.maxValue) {
+                        val frame = withFrameNanos { it }
+                        if (previousFrame != 0L) {
+                            val elapsedSeconds = (frame - previousFrame) / 1_000_000_000f
+                            fractionalPixels += elapsedSeconds * scrollSpeed.dpPerSecond * density
+                            val wholePixels = fractionalPixels.toInt()
+                            if (wholePixels > 0) {
+                                pageScrollState.scrollTo(
+                                    (pageScrollState.value + wholePixels).coerceAtMost(pageScrollState.maxValue)
+                                )
+                                fractionalPixels -= wholePixels
+                            }
+                        }
+                        previousFrame = frame
+                    }
+                    if (isAutoScrolling && pageIndex < state.pages.lastIndex) {
+                        delay(2_000L)
+                        if (isAutoScrolling) onSwipe(1)
+                    } else if (isAutoScrolling) {
+                        isAutoScrolling = false
+                    }
+                }
                 Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    modifier = Modifier.fillMaxSize().verticalScroll(pageScrollState),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ReaderToolButton("↓ End") {
+                            isAutoScrolling = false
+                            scrollScope.launch { pageScrollState.animateScrollTo(pageScrollState.maxValue) }
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        ReaderToolButton(if (isAutoScrolling) "Ⅱ" else "▶") {
+                            isAutoScrolling = !isAutoScrolling
+                        }
+                    }
                     Text(
                         text = state.pages[pageIndex],
                         fontSize = state.fontSize.sp,
                         lineHeight = (state.fontSize * 1.28f).sp,
+                        fontFamily = state.fontFamily.compose,
+                        fontWeight = if (state.isBold) FontWeight.Bold else FontWeight.Normal,
                         textAlign = if (state.language == ReaderLanguage.ARABIC) TextAlign.Right else TextAlign.Start,
                         color = state.textColor.color(useDarkColors) ?: if (useDarkColors) Color.White else Color.Black,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    ActionButton(if (pageOffset in state.bookmarks) "★ Saved" else "☆ Bookmark") {
-                        vm.toggleBookmark()
+                    Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        ReaderToolButton(
+                            if (pageOffset in state.bookmarks) "★" else "☆",
+                            modifier = Modifier.width(32.dp),
+                            contentDescription = if (pageOffset in state.bookmarks) "Remove bookmark" else "Save bookmark"
+                        ) {
+                            vm.toggleBookmark()
+                        }
+                        ReaderToolButton(
+                            "⚙",
+                            modifier = Modifier.width(32.dp),
+                            contentDescription = "Settings",
+                            onClick = onOpenSettings
+                        )
                     }
                 }
             }
         }
-        if (showControls) {
-            if (state.error != null) {
-                ActionButton("Retry") { onRetry() }
-            }
-            Text("Page ${state.pageIndex + 1} / ${state.pages.size}", fontSize = 12.sp)
-            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                ActionButton("‹") { vm.changePage(-1) }
-                Spacer(Modifier.width(6.dp))
-                ActionButton("›") { vm.changePage(1) }
-            }
-            OutlinedTextField(
-                value = requestedPage,
-                onValueChange = { onRequestedPageChanged(it.filter(Char::isDigit)) },
-                label = { androidx.compose.material3.Text("Page") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                colors = TextFieldDefaults.colors(unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent)
-            )
-            ActionButton("Aller à la page") { requestedPage.toIntOrNull()?.let(vm::goToPage) }
-            ActionButton("Réglages") { onOpenSettings() }
-        }
     }
+}
+
+@Composable
+private fun ReaderToolButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier
+            .height(30.dp)
+            .then(if (contentDescription == null) Modifier else Modifier.semantics {
+                this.contentDescription = contentDescription
+            }),
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+    ) { Text(label, fontSize = 9.sp, maxLines = 1) }
 }
 
 @Composable
 private fun ActionButton(label: String, color: Color = Color.Unspecified, onClick: () -> Unit) {
     Button(
         onClick = onClick,
-        modifier = Modifier.height(32.dp),
+        modifier = Modifier.heightIn(min = 48.dp),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
         colors = ButtonDefaults.buttonColors()
     ) { Text(label, color = color, fontSize = 11.sp, maxLines = 1) }

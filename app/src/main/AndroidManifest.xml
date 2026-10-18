@@ -5,8 +5,12 @@
 
     <application
         android:allowBackup="true"
-        android:label="Lecteur texte"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
         android:theme="@style/Theme.TextReaderWear">
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true">

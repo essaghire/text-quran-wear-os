@@ -4,8 +4,28 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val uploadSigningEnvironment = listOf(
+    "TEXTQURAN_UPLOAD_STORE_FILE",
+    "TEXTQURAN_UPLOAD_STORE_PASSWORD",
+    "TEXTQURAN_UPLOAD_KEY_ALIAS",
+    "TEXTQURAN_UPLOAD_KEY_PASSWORD"
+)
+val uploadSigningValues = uploadSigningEnvironment.map { name ->
+    providers.environmentVariable(name).orNull?.takeIf(String::isNotBlank)
+}
+val hasUploadSigning = uploadSigningValues.all { it != null }
+val releaseBundleRequested = gradle.startParameter.taskNames.any {
+    it.substringAfterLast(':') == "bundleRelease"
+}
+if (releaseBundleRequested && !hasUploadSigning) {
+    error(
+        "A Play upload key is required for bundleRelease. Set " +
+            uploadSigningEnvironment.joinToString(", ") + " in the build environment."
+    )
+}
+
 android {
-    namespace = "com.example.textreaderwear"
+    namespace = "com.essaghir.textquran"
     compileSdk = 35
 
     compileOptions {
@@ -14,11 +34,28 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.textreaderwear"
+        applicationId = "com.essaghir.textquran"
         minSdk = 30
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.1"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (hasUploadSigning) {
+                storeFile = file(uploadSigningValues[0]!!)
+                storePassword = uploadSigningValues[1]
+                keyAlias = uploadSigningValues[2]
+                keyPassword = uploadSigningValues[3]
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (hasUploadSigning) signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     buildFeatures { compose = true }
