@@ -27,7 +27,8 @@ Quran text editions are provided through AlQuran Cloud. An internet connection i
 
 - The app icon and feature graphic are prepared in `play-assets/`.
 - At least one genuine Wear OS app screenshot captured from the final build.
-- Public privacy-policy URL and completed Play Console Data safety and app-content declarations.
+- Privacy policy: https://essaghire.github.io/text-quran-wear-os/privacy-policy/
+- Completed Play Console Data safety and app-content declarations.
 
 The Arabic text source credits Tanzil.net and Quran Academy; the English edition is Saheeh International, served through AlQuran Cloud. Review the wording, screenshots, assets, text-edition attribution, and redistribution terms before publishing.
 

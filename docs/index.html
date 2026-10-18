@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Text Quran is a standalone Quran text reader for Wear OS watches.">
+  <title>Text Quran for Wear OS</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0c2232; color: #f8faf6; }
+    body { margin: 0; }
+    main { box-sizing: border-box; width: min(100% - 2rem, 48rem); margin: 0 auto; padding: 4rem 0; }
+    header { display: flex; align-items: center; gap: 1.25rem; }
+    header img { width: 6rem; height: 6rem; }
+    h1 { margin: 0; font-size: clamp(2rem, 8vw, 3.5rem); }
+    p, li { line-height: 1.7; }
+    a { color: #80cbc4; }
+    .card { margin-top: 2rem; padding: 1.5rem; border: 1px solid #31505e; border-radius: 1rem; background: #102d3b; }
+    footer { margin-top: 3rem; color: #b6c7c9; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <img src="assets/icon-512.png" alt="Open book with mint pages and a gold center line">
+      <div>
+        <h1>Text Quran</h1>
+        <p>Quran reading for Wear OS</p>
+      </div>
+    </header>
+    <section class="card" aria-labelledby="about">
+      <h2 id="about">Read on your watch</h2>
+      <p>Text Quran is a standalone Wear OS reader with Arabic Uthmani text and the Saheeh International English translation. Choose your text appearance, scroll at your own pace, and save bookmarks for later.</p>
+      <p>Text editions are requested from <a href="https://api.alquran.cloud/">AlQuran Cloud</a>. Arabic source attribution: Tanzil.net and Quran Academy. English translation: Saheeh International.</p>
+    </section>
+    <section class="card" aria-labelledby="privacy">
+      <h2 id="privacy">Privacy</h2>
+      <p>Reader settings, bookmarks, and downloaded text are stored locally on your watch. When downloading text, the request goes to AlQuran Cloud, which may receive your IP address and ordinary request metadata.</p>
+      <p><a href="privacy-policy/">Read the full privacy policy</a>.</p>
+    </section>
+    <footer>
+      <p>Questions? <a href="mailto:essaghir.e@gmail.com">essaghir.e@gmail.com</a></p>
+    </footer>
+  </main>
+</body>
+</html>

@@ -21,7 +21,7 @@ En cas d’échec réseau, le bouton **Réessayer** relance le téléchargement.
 - L’Android App Bundle de publication est configuré pour être signé avec une clé d’envoi fournie uniquement par variables d’environnement. Définissez `TEXTQURAN_UPLOAD_STORE_FILE`, `TEXTQURAN_UPLOAD_STORE_PASSWORD`, `TEXTQURAN_UPLOAD_KEY_ALIAS` et `TEXTQURAN_UPLOAD_KEY_PASSWORD`, puis exécutez `:app:bundleRelease`. Ne stockez pas les mots de passe dans Git ; activez Play App Signing dans Play Console.
 - Les identifiants de signature ne sont pas configurés dans ce dépôt. La génération de `bundleRelease` s’arrête explicitement tant que les quatre variables de signature ne sont pas définies.
 - Les éléments graphiques de fiche sont préparés dans [`play-assets/`](./play-assets/) : icône 512×512 et graphique promotionnel 1024×500. La capture d’écran réelle de la montre reste à ajouter.
-- [`PLAY_STORE_LISTING.md`](./PLAY_STORE_LISTING.md) contient un brouillon de fiche. [`PRIVACY_POLICY.md`](./PRIVACY_POLICY.md) est un brouillon à compléter avec un contact valide et à héberger sur une URL publique ; il ne doit pas être publié tel quel.
+- [`PLAY_STORE_LISTING.md`](./PLAY_STORE_LISTING.md) contient un brouillon de fiche. La [politique de confidentialité](https://essaghire.github.io/text-quran-wear-os/privacy-policy/) est destinée à être publiée sur GitHub Pages.
 - Avant la soumission, complétez les déclarations Data safety et App content dans Play Console, ajoutez la capture Wear OS, vérifiez l’attribution et les conditions de redistribution des éditions, et configurez Play App Signing avec votre clé d’envoi.
 
 ## Sources des textes
