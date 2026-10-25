@@ -37,8 +37,8 @@ android {
         applicationId = "com.essaghir.textquran"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toIntOrNull() ?: 1
+        versionName = providers.environmentVariable("VERSION_NAME").orNull ?: "0.1"
     }
 
     signingConfigs {
